@@ -32,10 +32,8 @@ typedef struct {        // Struct is defined before including config.h --
 
 #include "config.h"     // ****** CONFIGURATION IS DONE IN HERE ******
 
-#if defined(_ADAFRUIT_ST7735H_) || defined(_ADAFRUIT_ST77XXH_)
+#if defined(_ADAFRUIT_ST7735H_)
   typedef Adafruit_ST7735  displayType; // Using TFT display(s)
-#else
-  typedef Adafruit_SSD1351 displayType; // Using OLED display(s)
 #endif
 
 // A simple state machine is used to control eye blinks/winks:
@@ -55,58 +53,13 @@ struct {                // One-per-eye structure
   eyeBlink     blink;   // Current blink/wink state
 } eye[NUM_EYES];
 
-#ifdef ARDUINO_ARCH_SAMD
-  // SAMD boards use DMA (Teensy uses SPI FIFO instead):
-  // Two single-line 128-pixel buffers (16bpp) are used for DMA.
-  // Though you'd think fewer larger transfers would improve speed,
-  // multi-line buffering made no appreciable difference.
-  uint16_t          dmaBuf[2][128];
-  uint8_t           dmaIdx = 0; // Active DMA buffer # (alternate fill/send)
-  Adafruit_ZeroDMA  dma;
-  DmacDescriptor   *descriptor;
-
-  // DMA transfer-in-progress indicator and callback
-  static volatile bool dma_busy = false;
-  static void dma_callback(Adafruit_ZeroDMA *dma) { dma_busy = false; }
-#endif
-
 uint32_t startTime;  // For FPS indicator
 
-#if defined(SYNCPIN) && (SYNCPIN >= 0)
-#include <Wire.h>
-// If two boards are synchronized over I2C, this struct is passed from one
-// to other. No device-independent packing & unpacking is performed...both
-// boards are expected to be the same architecture & endianism.
-struct {
-  uint16_t iScale;  // These are basically the same arguments as
-  uint8_t  scleraX; // drawEye() expects, explained in that function.
-  uint8_t  scleraY;
-  uint8_t  uT;
-  uint8_t  lT;
-} syncStruct = { 512,
-  (SCLERA_WIDTH-SCREEN_WIDTH)/2, (SCLERA_HEIGHT-SCREEN_HEIGHT)/2, 0, 0 };
-
-void wireCallback(int n) {
-  if(n == sizeof syncStruct) {
-    // Read 'n' bytes from I2C into syncStruct
-    uint8_t *ptr = (uint8_t *)&syncStruct;
-    for(uint8_t i=0; i < sizeof syncStruct; i++) {
-      ptr[i] = Wire.read();
-    }
-  }
-}
-
-bool receiver = false;
-#endif // SYNCPIN
-
-// Stuff from Scream Box
-
-// YX5300 MP3 player 
-
-
-
+// Set up YX5300 MP3 player 
 
 SerialMP3Player mp3(RX,TX);
+
+// PIR variables - left in for now but commented out.  Might use later...
 
 //Prop Timing variables
 //int calibrationTime = 5;       // Set PIR calibration time.  Should be 30+ seconds for good warmup.  Time in seconds.
@@ -118,47 +71,23 @@ SerialMP3Player mp3(RX,TX);
 //int PirVal = 0;                 // variable for reading the pin status
 //int TIMER = 0;                  // For tracking PIR debounce
 
-
-// End Stuff from Scream Box
-
 // INITIALIZATION -- runs once at startup ----------------------------------
 
 void setup(void) {
   uint8_t e; // Eye index, 0 to NUM_EYES-1
 
-#if defined(SYNCPIN) && (SYNCPIN >= 0) // If using I2C sync...
-  pinMode(SYNCPIN, INPUT_PULLUP);      // Check for jumper to ground
-  if(!digitalRead(SYNCPIN)) {          // If there...
-    receiver = true;                   // Set this one up as receiver
-    Wire.begin(SYNCADDR);
-    Wire.onReceive(wireCallback);
-  } else {
-    Wire.begin();                      // Else set up as sender
-  }
-#endif
-
   Serial.begin(115200);
-  //while (!Serial);
   Serial.println("Init");
   randomSeed(analogRead(A3)); // Seed random() from floating analog input
-
-#ifdef DISPLAY_BACKLIGHT
-  // Enable backlight pin, initially off
-  Serial.println("Backlight off");
-  pinMode(DISPLAY_BACKLIGHT, OUTPUT);
-  digitalWrite(DISPLAY_BACKLIGHT, LOW);
-#endif
 
   // Initialize eye objects based on eyeInfo list in config.h:
   for(e=0; e<NUM_EYES; e++) {
     Serial.print("Create display #"); Serial.println(e);
-#if defined(_ADAFRUIT_ST7735H_) || defined(_ADAFRUIT_ST77XXH_) // TFT
-    eye[e].display     = new displayType(&TFT_SPI, eyeInfo[e].select,
-                           DISPLAY_DC, -1);
-#else // OLED
-    eye[e].display     = new displayType(128, 128, &TFT_SPI,
-                           eyeInfo[e].select, DISPLAY_DC, -1);
+    
+#if defined(_ADAFRUIT_ST7735H_) // TFT
+    eye[e].display     = new displayType(&TFT_SPI, eyeInfo[e].select, DISPLAY_DC, -1);
 #endif
+
     eye[e].blink.state = NOBLINK;
     // If project involves only ONE eye and NO other SPI devices, its
     // select line can be permanently tied to GND and corresponding pin
@@ -191,21 +120,20 @@ void setup(void) {
   pinMode(DISPLAY_RESET, OUTPUT);
   digitalWrite(DISPLAY_RESET, LOW);  delay(1);
   digitalWrite(DISPLAY_RESET, HIGH); delay(50);
-  #if defined(LITE_PIN) && (LITE_PIN >= 0)
-    digitalWrite(LITE_PIN, HIGH); 
-  #endif
   // Alternately, all display reset pin(s) could be connected to the
   // microcontroller reset, in which case DISPLAY_RESET should be set
   // to -1 or left undefined in config.h.
 #endif
 
+#if defined(LITE_PIN) && (LITE_PIN >= 0)
+  digitalWrite(LITE_PIN, HIGH); 
+#endif
+
   // After all-displays reset, now call init/begin func for each display:
   for(e=0; e<NUM_EYES; e++) {
-#if defined(_ADAFRUIT_ST7735H_) || defined(_ADAFRUIT_ST77XXH_) // TFT
+#if defined(_ADAFRUIT_ST7735H_)// TFT
     eye[e].display->initR(INITR_144GREENTAB);
     Serial.print("Init ST77xx display #"); Serial.println(e);
-#else // OLED
-    eye[e].display->begin();
 #endif
     Serial.println("Rotate");
     eye[e].display->setRotation(eyeInfo[e].rotation);
@@ -235,26 +163,6 @@ void setup(void) {
     #endif
     // After logo is drawn
   }
-  #ifdef DISPLAY_BACKLIGHT
-    int i;
-    Serial.println("Fade in backlight");
-    for(i=0; i<BACKLIGHT_MAX; i++) { // Fade logo in
-      analogWrite(DISPLAY_BACKLIGHT, i);
-      delay(2);
-    }
-    delay(1400); // Pause for screen layout/orientation
-    Serial.println("Fade out backlight");
-    for(; i>=0; i--) {
-      analogWrite(DISPLAY_BACKLIGHT, i);
-      delay(2);
-    }
-    for(e=0; e<NUM_EYES; e++) { // Clear display(s)
-      eye[e].display->fillScreen(0);
-    }
-    delay(100);
-  #else
-    delay(2000); // Pause for screen layout/orientation
-  #endif // DISPLAY_BACKLIGHT
 #endif // LOGO_TOP_WIDTH
 
   // One of the displays is configured to mirror on the X axis.  Simplifies

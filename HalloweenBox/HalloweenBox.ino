@@ -169,10 +169,8 @@ void setup(void) {
   // eyelid handling in the drawEye() function -- no need for distinct
   // L-to-R or R-to-L inner loops.  Just the X coordinate of the iris is
   // then reversed when drawing this eye, so they move the same.  Magic!
-#if defined(SYNCPIN) && (SYNCPIN >= 0)
-  if(receiver) {
-#endif
-#if defined(_ADAFRUIT_ST7735H_) || defined(_ADAFRUIT_ST77XXH_) // TFT
+
+#if defined(_ADAFRUIT_ST7735H_) // TFT
     const uint8_t mirrorTFT[]  = { 0x88, 0x28, 0x48, 0xE8 }; // Mirror+rotate
     eye[0].display->sendCommand(
     #ifdef ST77XX_MADCTL
@@ -181,79 +179,9 @@ void setup(void) {
       ST7735_MADCTL, // Older TFT lib
     #endif
       &mirrorTFT[eyeInfo[0].rotation & 3], 1);
-  #else // OLED
-    const uint8_t rotateOLED[] = { 0x74, 0x77, 0x66, 0x65 },
-                  mirrorOLED[] = { 0x76, 0x67, 0x64, 0x75 }; // Mirror+rotate
-    // If OLED, loop through ALL eyes and set up remap register
-    // from either mirrorOLED[] (first eye) or rotateOLED[] (others).
-    // The OLED library doesn't normally use the remap reg (TFT does).
-    for(e=0; e<NUM_EYES; e++) {
-      eye[e].display->sendCommand(SSD1351_CMD_SETREMAP, e ?
-        &rotateOLED[eyeInfo[e].rotation & 3] :
-        &mirrorOLED[eyeInfo[e].rotation & 3], 1);
-    }
-#endif
-#if defined(SYNCPIN) && (SYNCPIN >= 0)
-  } // Don't mirror receiver screen
-#endif
-
-#ifdef ARDUINO_ARCH_SAMD
-  // Set up SPI DMA on SAMD boards:
-  int                dmac_id;
-  volatile uint32_t *data_reg;
-  if(&TFT_PERIPH == &sercom0) {
-    dmac_id  = SERCOM0_DMAC_ID_TX;
-    data_reg = &SERCOM0->SPI.DATA.reg;
-#if defined SERCOM1
-  } else if(&TFT_PERIPH == &sercom1) {
-    dmac_id  = SERCOM1_DMAC_ID_TX;
-    data_reg = &SERCOM1->SPI.DATA.reg;
-#endif
-#if defined SERCOM2
-  } else if(&TFT_PERIPH == &sercom2) {
-    dmac_id  = SERCOM2_DMAC_ID_TX;
-    data_reg = &SERCOM2->SPI.DATA.reg;
-#endif
-#if defined SERCOM3
-  } else if(&TFT_PERIPH == &sercom3) {
-    dmac_id  = SERCOM3_DMAC_ID_TX;
-    data_reg = &SERCOM3->SPI.DATA.reg;
-#endif
-#if defined SERCOM4
-  } else if(&TFT_PERIPH == &sercom4) {
-    dmac_id  = SERCOM4_DMAC_ID_TX;
-    data_reg = &SERCOM4->SPI.DATA.reg;
-#endif
-#if defined SERCOM5
-  } else if(&TFT_PERIPH == &sercom5) {
-    dmac_id  = SERCOM5_DMAC_ID_TX;
-    data_reg = &SERCOM5->SPI.DATA.reg;
-#endif
-  }
-
-  Serial.println("DMA init");
-  dma.allocate();
-  dma.setTrigger(dmac_id);
-  dma.setAction(DMA_TRIGGER_ACTON_BEAT);
-  descriptor = dma.addDescriptor(
-    NULL,               // move data
-    (void *)data_reg,   // to here
-    sizeof dmaBuf[0],   // this many...
-    DMA_BEAT_SIZE_BYTE, // bytes/hword/words
-    true,               // increment source addr?
-    false);             // increment dest addr?
-  dma.setCallback(dma_callback);
-
-#endif // End SAMD-specific SPI DMA init
-
-#ifdef DISPLAY_BACKLIGHT
-  Serial.println("Backlight on!");
-  analogWrite(DISPLAY_BACKLIGHT, BACKLIGHT_MAX);
 #endif
 
   startTime = millis(); // For frame-rate calculation
-
-  // Stuff from Scream Box Setup
 
 // Set up MP3 board
   mp3.begin(9600);        // start mp3-communication
@@ -265,10 +193,7 @@ void setup(void) {
   mp3.setVol(15);       // Set volume of playback, 0 - 30.
   mp3.qVol();
 /*
-// Set up inputs/output pins 
-//  pinMode(pirPin, INPUT);       // declare PIR sensor as input
-//   pinMode(ledPin, OUTPUT);      // declare LED as output - conflicts with SPI CLK!
- 
+
 //  Serial.begin(9600);           // Use Serial Monitor to debug
     
 //Give the PIR sensor some time to calibrate
@@ -304,32 +229,6 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   int16_t  irisX, irisY;
   uint16_t p, a;
   uint32_t d;
-
-#if defined(SYNCPIN) && (SYNCPIN >= 0)
-  if(receiver) {
-    // Overwrite arguments with values in syncStruct.  Disable interrupts
-    // briefly so new data can't overwrite the struct in mid-parse.
-    noInterrupts();
-    iScale  = syncStruct.iScale;
-    // Screen is mirrored, this 'de-mirrors' the eye X direction
-    scleraX = SCLERA_WIDTH - 1 - SCREEN_WIDTH - syncStruct.scleraX;
-    scleraY = syncStruct.scleraY;
-    uT      = syncStruct.uT;
-    lT      = syncStruct.lT;
-    interrupts();
-  } else {
-    // Stuff arguments into syncStruct and send to receiver
-    syncStruct.iScale  = iScale;
-    syncStruct.scleraX = scleraX;
-    syncStruct.scleraY = scleraY;
-    syncStruct.uT      = uT;
-    syncStruct.lT      = lT;
-    Wire.beginTransmission(SYNCADDR);
-    Wire.write((char *)&syncStruct, sizeof syncStruct);
-    Wire.endTransmission();
-  }
-#endif
-
   uint8_t  irisThreshold = (128 * (1023 - iScale) + 512) / 1024;
   uint32_t irisScale     = IRIS_MAP_HEIGHT * 65536 / irisThreshold;
 
@@ -338,25 +237,15 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   // reset on each frame here in case of an SPI glitch.
   TFT_SPI.beginTransaction(settings);
   digitalWrite(eyeInfo[e].select, LOW);                        // Chip select
-#if defined(_ADAFRUIT_ST7735H_) || defined(_ADAFRUIT_ST77XXH_) // TFT
+#if defined(_ADAFRUIT_ST7735H_) // TFT
   eye[e].display->setAddrWindow(0, 0, 128, 128);
-#else // OLED
-  eye[e].display->writeCommand(SSD1351_CMD_SETROW);    // Y range
-  eye[e].display->spiWrite(0); eye[e].display->spiWrite(SCREEN_HEIGHT - 1);
-  eye[e].display->writeCommand(SSD1351_CMD_SETCOLUMN); // X range
-  eye[e].display->spiWrite(0); eye[e].display->spiWrite(SCREEN_WIDTH  - 1);
-  eye[e].display->writeCommand(SSD1351_CMD_WRITERAM);  // Begin write
 #endif
   digitalWrite(eyeInfo[e].select, LOW);                // Re-chip-select
   digitalWrite(DISPLAY_DC, HIGH);                      // Data mode
   // Now just issue raw 16-bit values for every pixel...
-
   scleraXsave = scleraX; // Save initial X value to reset on each line
   irisY       = scleraY - (SCLERA_HEIGHT - IRIS_HEIGHT) / 2;
   for(screenY=0; screenY<SCREEN_HEIGHT; screenY++, scleraY++, irisY++) {
-#ifdef ARDUINO_ARCH_SAMD
-    uint16_t *ptr = &dmaBuf[dmaIdx][0];
-#endif
     scleraX = scleraXsave;
     irisX   = scleraXsave - (SCLERA_WIDTH - IRIS_WIDTH) / 2;
     for(screenX=0; screenX<SCREEN_WIDTH; screenX++, scleraX++, irisX++) {
@@ -377,35 +266,22 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
           p = sclera[scleraY][scleraX];                 // Pixel = sclera
         }
       }
-#ifdef ARDUINO_ARCH_SAMD
-      *ptr++ = __builtin_bswap16(p); // DMA: store in scanline buffer
-#else
+
       // SPI FIFO technique from Paul Stoffregen's ILI9341_t3 library:
       while(KINETISK_SPI0.SR & 0xC000); // Wait for space in FIFO
       KINETISK_SPI0.PUSHR = p | SPI_PUSHR_CTAS(1) | SPI_PUSHR_CONT;
-#endif
     } // end column
-#ifdef ARDUINO_ARCH_SAMD
-    while(dma_busy); // Wait for prior DMA xfer to finish
-    descriptor->SRCADDR.reg = (uint32_t)&dmaBuf[dmaIdx] + sizeof dmaBuf[0];
-    dma_busy = true;
-    dmaIdx   = 1 - dmaIdx;
-    dma.startJob();
-#endif
   } // end scanline
 
-#ifdef ARDUINO_ARCH_SAMD
-  while(dma_busy);  // Wait for last scanline to transmit
-#else
   KINETISK_SPI0.SR |= SPI_SR_TCF;         // Clear transfer flag
   while((KINETISK_SPI0.SR & 0xF000) ||    // Wait for SPI FIFO to drain
        !(KINETISK_SPI0.SR & SPI_SR_TCF)); // Wait for last bit out
-#endif
 
   digitalWrite(eyeInfo[e].select, HIGH);          // Deselect
   TFT_SPI.endTransaction();
 }
 
+// YOUAREHERE
 // EYE ANIMATION -----------------------------------------------------------
 
 const uint8_t ease[] = { // Ease in/out curve for eye movements 3*t^2-2*t^3

@@ -59,6 +59,8 @@ uint32_t startTime;  // For FPS indicator
 
 SerialMP3Player mp3(RX,TX);
 
+enum Trigger {Button = 0, PIR = 1};
+
 // PIR variables - left in for now but commented out.  Might use later...
 
 //Prop Timing variables
@@ -411,9 +413,9 @@ void frame( // Process motion for a single frame of left or right eye
     if((t - eye[eyeIndex].blink.startTime) >= eye[eyeIndex].blink.duration) {
       // Yes -- increment blink state, unless...
       if((eye[eyeIndex].blink.state == ENBLINK) && ( // Enblinking and...
-#if defined(BLINK_PIN) && (BLINK_PIN >= 0)
-        (digitalRead(BLINK_PIN) == LOW) ||           // blink or wink held...
-#endif
+//#if defined(BLINK_PIN) && (BLINK_PIN >= 0)
+//        (digitalRead(BLINK_PIN) == LOW) ||           // blink or wink held...
+//#endif
         ((eyeInfo[eyeIndex].wink >= 0) &&
          digitalRead(eyeInfo[eyeIndex].wink) == LOW) )) {
         // Don't advance state yet -- eye is held closed instead
@@ -427,6 +429,8 @@ void frame( // Process motion for a single frame of left or right eye
       }
     }
   } else { // Not currently blinking...check buttons!
+
+/*    
 #if defined(BLINK_PIN) && (BLINK_PIN >= 0)
     if(digitalRead(BLINK_PIN) == LOW) {
       // Manually-initiated blinks have random durations like auto-blink
@@ -440,6 +444,8 @@ void frame( // Process motion for a single frame of left or right eye
       }
     } else
 #endif
+
+*/
     if((eyeInfo[eyeIndex].wink >= 0) &&
        (digitalRead(eyeInfo[eyeIndex].wink) == LOW)) { // Wink!
       eye[eyeIndex].blink.state     = ENBLINK;
@@ -510,13 +516,13 @@ void frame( // Process motion for a single frame of left or right eye
 
 #if defined(BLINK_PIN) && (BLINK_PIN >= 0)
     if(digitalRead(BLINK_PIN) == LOW) {
-      eyesOffPlaySoundEyesOn();  
+      eyesOffPlaySoundEyesOn(Button);  
     }
 #endif
 
 #if defined(PIR_PIN) && (PIR_PIN >= 0)
     if(digitalRead(PIR_PIN) == HIGH) {
-      eyesOffPlaySoundEyesOn();
+      eyesOffPlaySoundEyesOn(PIR);
     }
 #endif
 }
@@ -558,22 +564,35 @@ void split( // Subdivides motion path into two sub-paths w/randimization
 
 #endif // !LIGHT_PIN
 
-void eyesOffPlaySoundEyesOn(){
+void eyesOffPlaySoundEyesOn(Trigger trigger){
 
   #if defined(LITE_PIN) && (LITE_PIN >= 0)
     digitalWrite(LITE_PIN, LOW); 
   #endif
         
-  Serial.print("Blink Delay PIR...\n");
-  Serial.print("Play MP3");
+  Serial.print("Blink...\n");
+  Serial.print("Play MP3...\n");
   mp3.play(001);     // Play mp3 001 in folder 1
   delay(500);       
+
+  #if (defined(BLINK_PIN) && (BLINK_PIN > 0) && trigger == Button)
+
+    while (digitalRead(BLINK_PIN) == LOW){
+      Serial.print("Play MP3 again\n");
+      mp3.play(001);     // Play mp3 001 in folder 1
+      delay(500);        
+    }
+  #endif
+
+  #if (defined(PIR_PIN) && (PIR_PIN > 0) && trigger == PIR) 
   
-  while (digitalRead(PIR_PIN) == HIGH){
-    Serial.print("Play MP3");
-    mp3.play(001);     // Play mp3 001 in folder 1
-    delay(500);        
-  }
+    while (digitalRead(PIR_PIN) == HIGH){
+      Serial.print("Play MP3 again\n");
+      mp3.play(001);     // Play mp3 001 in folder 1
+      delay(500);        
+    }
+  #endif
+  
   #if defined(LITE_PIN) && (LITE_PIN >= 0)
     digitalWrite(LITE_PIN, HIGH); 
   #endif    
@@ -584,7 +603,6 @@ void eyesOffPlaySoundEyesOn(){
 void loop() {
 
 #if defined(LIGHT_PIN) && (LIGHT_PIN >= 0) // Interactive iris
-
   int16_t v = analogRead(LIGHT_PIN);       // Raw dial/photocell reading
 #ifdef LIGHT_PIN_FLIP
   v = 1023 - v;                            // Reverse reading from sensor
@@ -613,4 +631,5 @@ void loop() {
   oldIris = newIris;
 
 #endif // LIGHT_PIN
+
 }

@@ -281,7 +281,7 @@ void drawEye( // Renders one eye.  Inputs must be pre-clipped & valid.
   TFT_SPI.endTransaction();
 }
 
-// YOUAREHERE
+
 // EYE ANIMATION -----------------------------------------------------------
 
 const uint8_t ease[] = { // Ease in/out curve for eye movements 3*t^2-2*t^3
@@ -510,54 +510,13 @@ void frame( // Process motion for a single frame of left or right eye
 
 #if defined(BLINK_PIN) && (BLINK_PIN >= 0)
     if(digitalRead(BLINK_PIN) == LOW) {
-//    if(digitalRead(BLINK_PIN) == LOW && blinkEnable == 1) {
-//      for (int i = 0; i< NUM_EYES; i++){
-//        drawEye(i, iScale, eyeX, eyeY, 255, 255);
-//      }
-
-      #if defined(LITE_PIN) && (LITE_PIN >= 0)
-        digitalWrite(LITE_PIN, LOW); 
-      #endif
-      
-      Serial.print("Blink Delay Button...\n");
-      Serial.print("Play MP3");
-      mp3.play(001);     // Play mp3 001 in folder 1
-      delay(500);       
-      
-      while (digitalRead(BLINK_PIN) == LOW){
-        Serial.print("Play MP3");
-        mp3.play(001);     // Play mp3 001 in folder 1
-        delay(500);        
-      }
-      #if defined(LITE_PIN) && (LITE_PIN >= 0)
-        digitalWrite(LITE_PIN, HIGH); 
-      #endif      
+      eyesOffPlaySoundEyesOn();  
     }
 #endif
 
 #if defined(PIR_PIN) && (PIR_PIN >= 0)
     if(digitalRead(PIR_PIN) == HIGH) {
-//      for (int i = 0; i< NUM_EYES; i++){
-//        drawEye(i, iScale, eyeX, eyeY, 255, 255);
-//      }
-
-      #if defined(LITE_PIN) && (LITE_PIN >= 0)
-        digitalWrite(LITE_PIN, LOW); 
-      #endif
-            
-      Serial.print("Blink Delay PIR...\n");
-      Serial.print("Play MP3");
-      mp3.play(001);     // Play mp3 001 in folder 1
-      delay(500);       
-      
-      while (digitalRead(PIR_PIN) == HIGH){
-        Serial.print("Play MP3");
-        mp3.play(001);     // Play mp3 001 in folder 1
-        delay(500);        
-      }
-      #if defined(LITE_PIN) && (LITE_PIN >= 0)
-        digitalWrite(LITE_PIN, HIGH); 
-      #endif        
+      eyesOffPlaySoundEyesOn();
     }
 #endif
 }
@@ -598,6 +557,27 @@ void split( // Subdivides motion path into two sub-paths w/randimization
 }
 
 #endif // !LIGHT_PIN
+
+void eyesOffPlaySoundEyesOn(){
+
+  #if defined(LITE_PIN) && (LITE_PIN >= 0)
+    digitalWrite(LITE_PIN, LOW); 
+  #endif
+        
+  Serial.print("Blink Delay PIR...\n");
+  Serial.print("Play MP3");
+  mp3.play(001);     // Play mp3 001 in folder 1
+  delay(500);       
+  
+  while (digitalRead(PIR_PIN) == HIGH){
+    Serial.print("Play MP3");
+    mp3.play(001);     // Play mp3 001 in folder 1
+    delay(500);        
+  }
+  #if defined(LITE_PIN) && (LITE_PIN >= 0)
+    digitalWrite(LITE_PIN, HIGH); 
+  #endif    
+}
 
 // MAIN LOOP -- runs continuously after setup() ----------------------------
 

@@ -572,27 +572,30 @@ void eyesOffPlaySoundEyesOn(Trigger trigger){
         
   Serial.print("Blink...\n");
   Serial.print("Play MP3...\n");
-  mp3.play(001);     // Play mp3 001 in folder 1
-  delay(500);       
+//  mp3.playNext();
+  mp3.play();
+  delay(2000);
 
   #if (defined(BLINK_PIN) && (BLINK_PIN > 0) && trigger == Button)
 
     while (digitalRead(BLINK_PIN) == LOW){
       Serial.print("Play MP3 again\n");
-      mp3.play(001);     // Play mp3 001 in folder 1
-      delay(500);        
-    }
+      mp3.play();
+      delay(2000);
+
+   }
   #endif
 
   #if (defined(PIR_PIN) && (PIR_PIN > 0) && trigger == PIR) 
   
     while (digitalRead(PIR_PIN) == HIGH){
       Serial.print("Play MP3 again\n");
-      mp3.play(001);     // Play mp3 001 in folder 1
-      delay(500);        
+      mp3.play();
+      delay(2000);
     }
   #endif
-  
+
+  delay(5000);
   #if defined(LITE_PIN) && (LITE_PIN >= 0)
     digitalWrite(LITE_PIN, HIGH); 
   #endif    
